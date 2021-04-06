@@ -1,0 +1,4 @@
+name: EntityEngine
+main: com.pandoaspen.entityengine.EntityEnginePlugin
+version: 1.0
+api-version: 1.16
