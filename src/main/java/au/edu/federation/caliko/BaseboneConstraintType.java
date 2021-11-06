@@ -10,3 +10,4 @@ public enum BaseboneConstraintType {
     GLOBAL_HINGE, // World-space hinge constraint
     LOCAL_HINGE   // Hinge constraint in the coordinate space of (i.e. relative to) the direction of the connected bone
 }
+

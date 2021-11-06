@@ -1915,3 +1915,4 @@ public class IKChain implements Serializable {
     }
 
 } // End of FabrikChain3D class
+

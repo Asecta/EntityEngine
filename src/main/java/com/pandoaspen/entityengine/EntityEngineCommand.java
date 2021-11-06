@@ -1,21 +1,30 @@
 package com.pandoaspen.entityengine;
 
-import au.edu.federation.caliko.IKBone;
-import au.edu.federation.caliko.IKChain;
-import au.edu.federation.caliko.IKStructure;
 import co.aikar.commands.BaseCommand;
 import co.aikar.commands.annotation.CommandAlias;
 import co.aikar.commands.annotation.Dependency;
 import co.aikar.commands.annotation.Subcommand;
 import com.pandoaspen.entityengine.engine.EEntity;
 import com.pandoaspen.entityengine.engine.EntityEngine;
+import com.pandoaspen.entityengine.engine.animation.DefaultAnimationHandler;
 import com.pandoaspen.entityengine.entity.BipodEntity;
+import com.pandoaspen.entityengine.entity.RexEntity;
+import com.pandoaspen.entityengine.entity.SimpleAIRexEntity;
 import com.pandoaspen.entityengine.entity.SpinnerEntity;
-import org.bukkit.Bukkit;
-import org.bukkit.Color;
+import com.pandoaspen.entityengine.utils.ModelMath;
 import org.bukkit.Location;
-import org.bukkit.Particle;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Zombie;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Vector;
+import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.UUID;
@@ -25,6 +34,35 @@ import java.util.function.BiFunction;
 public class EntityEngineCommand extends BaseCommand {
     @Dependency private EntityEnginePlugin plugin;
 
+    @Subcommand("test")
+    public void cmdTest(Player sender) {
+
+        Location l = new Location(sender.getLocation().getWorld(), sender.getLocation().getX(), sender.getLocation().getY(), sender.getLocation().getZ(), -90, 0);
+
+        ArmorStand armorStand = (ArmorStand) sender.getWorld().spawnEntity(l, EntityType.ARMOR_STAND);
+        armorStand.setGravity(false);
+
+        armorStand.getEquipment().setHelmet(new ItemStack(Material.DIAMOND_BLOCK));
+        Location origin = armorStand.getEyeLocation();
+
+        Vector3f o = new Vector3f((float) armorStand.getLocation().getX(), (float) armorStand.getLocation().getY(), (float) armorStand.getLocation().getZ());
+
+        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+
+            Vector dirVec = sender.getEyeLocation().toVector().subtract(origin.toVector());
+            dirVec.normalize();
+
+            Quaternionf dir = new Quaternionf();
+            dir.lookAlong(new Vector3f((float) dirVec.getX(), (float) dirVec.getY(), (float) dirVec.getZ()), new Vector3f(0, 1, 0));
+
+            Matrix4f matrix4f = new Matrix4f();
+            matrix4f.rotate(dir);
+
+            ModelMath.positionStand(armorStand, o, matrix4f, false);
+        }, 1, 1);
+
+    }
+
     @Subcommand("spawn")
     public void cmdSpawn(Player sender, String type) {
         plugin.getEntityEngine().spawnEntity(sender.getLocation(), getEntityType(type));
@@ -32,9 +70,14 @@ public class EntityEngineCommand extends BaseCommand {
 
     public BiFunction<UUID, Location, ? extends EEntity> getEntityType(String type) {
         switch (type.toUpperCase()) {
-            case "BIPOD": return BipodEntity::new;
-            case "SPINNER": return SpinnerEntity::new;
-            default: return null;
+            case "BIPOD":
+                return BipodEntity::new;
+            case "SPINNER":
+                return SpinnerEntity::new;
+            case "REX":
+                return RexEntity::new;
+            default:
+                return null;
         }
     }
 
@@ -45,81 +88,46 @@ public class EntityEngineCommand extends BaseCommand {
 
     @Subcommand("kill")
     public void cmdKill(Player sender) {
-
         plugin.getEntityEngine().destroy();
-        ;
-
     }
 
-    static float tX = 0, tY = 0, tZ = 0;
-
-    @Subcommand("testik")
-    public void cmdTestIK(Player sender, int bones, int delay, int dist) {
-        Location l = sender.getLocation();
-
-        tX = (float) l.getX() + 1f;
-        tY = (float) l.getY() + 1f;
-        tZ = (float) l.getZ() + 1f;
-
-        Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-
-            IKStructure structure;
-
-            public void setup() {
-                structure = new IKStructure();
-
-                Colour4f boneColour = new Colour4f();
-
-                IKChain chain = new IKChain();
-
-                Vector3f direction = new Vector3f(1, 0, 0);
-
-                Vector3f startLoc = new Vector3f(tX, tY, tZ);
-                Vector3f endLoc = startLoc.add(direction.mul(1, new Vector3f()), new Vector3f());
-
-                IKBone basebone = new IKBone(new Vector3f(startLoc), new Vector3f(endLoc));
-                basebone.setColour(boneColour);
-                chain.addBone(basebone);
-
-                for (int boneLoop = 0; boneLoop < bones; boneLoop++) {
-                    chain.addConsecutiveBone(new Vector3f(direction), 1, boneColour);
-                }
-
-                structure.addChain(chain);
-            }
-
-            @Override
-            public void run() {
-                if (structure == null) {
-                    setup();
-                    return;
-                }
-
-                for (int chainIdx = 0; chainIdx < structure.getNumChains(); chainIdx++) {
-                    for (int boneIdx = 0; boneIdx < structure.getChain(chainIdx).getNumBones(); boneIdx++) {
-                        drawBone(structure.getChain(chainIdx).getBone(boneIdx));
-                    }
-                }
-
-                try {
-
-                    Player p = Bukkit.getPlayer("Asecta");
-                    Location loc = p.getEyeLocation().add(p.getLocation().getDirection().multiply(dist));
-
-                    structure.solveForTarget(new Vector3f((float) loc.getX(), (float) loc.getY(), (float) loc.getZ()));
-                } catch (Exception exception) {
-                }
-            }
-        }, delay, delay);
+    @Subcommand("q1")
+    public void cmdQ(Player sender, float x, float y, float z) {
+        DefaultAnimationHandler.q1X = x;
+        DefaultAnimationHandler.q1Y = y;
+        DefaultAnimationHandler.q1Z = z;
     }
 
-    public void drawBone(IKBone bone) {
-        Vector3f v = bone.getEndLocation().sub(bone.getStartLocation(), new Vector3f()).normalize().mul(.1f);
+    @Subcommand("q2")
+    public void cmdQ2(Player sender, float x, float y, float z, float w) {
+        DefaultAnimationHandler.q2X = x;
+        DefaultAnimationHandler.q2Y = y;
+        DefaultAnimationHandler.q2Z = z;
+        DefaultAnimationHandler.q2W = w;
+    }
 
-        Vector3f loc = new Vector3f(bone.getStartLocation());
-        for (int i = 0; i < 10; i++) {
-            Bukkit.getWorlds().get(0).spawnParticle(Particle.REDSTONE, loc.x, loc.y, loc.z, 1, new Particle.DustOptions(Color.AQUA, .5f));
-            loc.add(v, loc);
-        }
+
+    @Subcommand("xyz")
+    public void cmdXYZ(Player sender, int x, int y, int z) {
+        ModelMath.x = x;
+        ModelMath.y = y;
+        ModelMath.z = z;
+    }
+
+    @Subcommand("fakerex")
+    public void cmdFakeRex(Player sender) {
+        World world = sender.getWorld();
+
+        Zombie zombie = (Zombie) world.spawnEntity(sender.getLocation(), EntityType.ZOMBIE);
+        zombie.setSilent(true);
+        zombie.setInvisible(true);
+        zombie.setShouldBurnInDay(false);
+
+
+        PotionEffect speedPot = new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 2);
+        zombie.addPotionEffect(speedPot);
+
+        SimpleAIRexEntity rexEntity = new SimpleAIRexEntity(UUID.randomUUID(), zombie);
+        plugin.getEntityEngine().spawnEntity(rexEntity);
     }
 }

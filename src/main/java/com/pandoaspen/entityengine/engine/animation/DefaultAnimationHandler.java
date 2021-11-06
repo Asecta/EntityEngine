@@ -5,6 +5,7 @@ import com.pandoaspen.entityengine.engine.api.AnimationHandler;
 import com.pandoaspen.entityengine.engine.api.AnimationObject;
 import com.pandoaspen.entityengine.engine.utils.AnimationData;
 import com.pandoaspen.entityengine.engine.utils.AnimationUtils;
+import de.javagl.jgltf.model.AccessorModel;
 import de.javagl.jgltf.model.GltfAnimations;
 import de.javagl.jgltf.model.GltfModel;
 import de.javagl.jgltf.model.NodeModel;
@@ -18,15 +19,12 @@ import org.joml.Vector3f;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.nio.DoubleBuffer;
+import java.util.*;
 import java.util.function.Supplier;
 
 public class DefaultAnimationHandler implements AnimationHandler {
 
-    private final Supplier<? extends AnimationObject> animationObjectSupplier;
     private final EEntity host;
 
     private final AnimationManager animationManager;
@@ -38,11 +36,10 @@ public class DefaultAnimationHandler implements AnimationHandler {
 
     private Map<NodeModel, AnimationObject> animationObjectMap;
 
-    private Map<NodeModel, Supplier<float[]>> nodeModelSupplierMap = new HashMap<>();
+    private Map<NodeModel, TransformSupplier> nodeModelSupplierMap = new HashMap<>();
 
-    public DefaultAnimationHandler(URI gblURI, EEntity host, Supplier<? extends AnimationObject> animationObjectSupplier) throws IOException {
+    public DefaultAnimationHandler(URI gblURI, EEntity host) throws IOException {
         this.host = host;
-        this.animationObjectSupplier = animationObjectSupplier;
         this.animationManager = GltfAnimations.createAnimationManager(AnimationManager.AnimationPolicy.LOOP);
         this.gltfModel = new GltfModelReader().read(gblURI);
 
@@ -62,7 +59,12 @@ public class DefaultAnimationHandler implements AnimationHandler {
         });
 
         animationNodeMap.values().stream().flatMap(map -> map.keySet().stream()).forEach(nodeModel -> {
-            AnimationObject animationObject = animationObjectSupplier.get();
+
+            float scale = nodeModel.getScale()[0] * 2;
+
+            boolean small = scale < .5;
+
+            AnimationObject animationObject = new StandEntityAnimationObject(small);
             animationObjectMap.put(nodeModel, animationObject);
         });
 
@@ -71,9 +73,14 @@ public class DefaultAnimationHandler implements AnimationHandler {
             nodeModelAnimationMap.forEach(((nodeModel, animation) -> {
                 if (!nodeModel.getName().startsWith("Cube")) return;
                 AnimationObject animationObject = animationObjectMap.get(nodeModel);
-                Supplier<float[]> supplier = nodeModel.createGlobalTransformSupplier();
-                nodeModelSupplierMap.put(nodeModel, supplier);
-                //                animation.addAnimationListener((source, timeS, values) -> handleAnimation(animationName, nodeModel, animationObject, timeS, supplier.get()));
+                Supplier<float[]> globalTransformSupplier = nodeModel.createGlobalTransformSupplier();
+                Supplier<float[]> localTransformSupplier = nodeModel.createLocalTransformSupplier();
+
+                float[] translation = nodeModel.getTranslation();
+                float[] rotation = nodeModel.getRotation();
+                float[] meshTranslation = computeLocalMeshTranslation(nodeModel);
+
+                nodeModelSupplierMap.put(nodeModel, new TransformSupplier(translation, rotation, meshTranslation, globalTransformSupplier, localTransformSupplier));
             }));
         }
 
@@ -85,25 +92,6 @@ public class DefaultAnimationHandler implements AnimationHandler {
         animationManager.removeAnimations(animationManager.getAnimations());
 
         setCurrentAnimation("IdleAction");
-    }
-
-    public void handleAnimation(String animationName, NodeModel nodeModel, AnimationObject animationObject, float deltaTime, float[] arr) {
-        //        if (!animationName.equals(currentAnimation)) return;
-        //
-        //        Vector3f origin = host.getPosition();
-        //        Vector3f direction = host.getDirection();
-        //
-        //        Matrix4f positionMatrix = new Matrix4f();
-        //        positionMatrix.set(arr);
-        //
-        //        Matrix4f matrix = new Matrix4f();
-        //        matrix.translate(origin);
-        //        matrix.lookAlong(new Vector3f(direction.x, direction.y, direction.z), new Vector3f(0, -1, 0));
-        //        matrix.rotate(new Quaternionf(1, 0, 0, 0));
-        //
-        //        matrix.mul(positionMatrix);
-        //
-        //        animationObject.update(matrix);
     }
 
     public Set<String> listAnimations() {
@@ -122,24 +110,45 @@ public class DefaultAnimationHandler implements AnimationHandler {
         return true;
     }
 
+    public static float q1X = 0, q1Y = 1, q1Z = 0;
+    public static float q2X = 0, q2Y = 1, q2Z = 0, q2W = 1;
+
     public void update(long deltaNs) {
+        deltaNs *= scalar;
         animationManager.performStep(deltaNs);
 
+        Vector3f origin = host.getPosition();
+        Vector3f direction = host.getDirection();
+
         animationObjectMap.forEach(((nodeModel, animationObject) -> {
-            Vector3f origin = host.getPosition();
-            Vector3f direction = host.getDirection();
-
-            Matrix4f positionMatrix = new Matrix4f();
-            positionMatrix.set(nodeModelSupplierMap.get(nodeModel).get());
-
-            Matrix4f matrix = new Matrix4f();
-            matrix.translate(origin);
-            matrix.lookAlong(new Vector3f(direction.x, direction.y, direction.z), new Vector3f(0, -1, 0));
-            matrix.rotate(new Quaternionf(1, 0, 0, 0));
-            matrix.mul(positionMatrix);
-
-            animationObject.update(matrix);
+            TransformSupplier transformSupplier = nodeModelSupplierMap.get(nodeModel);
+            updateObject(origin, direction, transformSupplier, animationObject);
         }));
+    }
+
+    public double scalar = 1;
+
+    public void setAnimationSpeed(double scalar) {
+        this.scalar = scalar;
+    }
+
+    private void updateObject(Vector3f origin, Vector3f direction, TransformSupplier transformSupplier, AnimationObject animationObject) {
+        Matrix4f globalTransform = transformSupplier.getGlobalTransformMatrix();
+        Quaternionf rotation = transformSupplier.getRotationQuat();
+
+        Matrix4f matrix = new Matrix4f();
+
+        Quaternionf dir = new Quaternionf();
+        dir.lookAlong(direction, new Vector3f(0, 1, 0));
+
+        matrix.rotate(dir.invert());
+
+        matrix.translateLocal(origin);
+
+        matrix.mul(globalTransform);
+        matrix.rotate(rotation);
+
+        animationObject.update(matrix);
     }
 
     public void destroy() {
@@ -150,5 +159,26 @@ public class DefaultAnimationHandler implements AnimationHandler {
     @Override
     public NodeModel getNodeModel(String name) {
         return gltfModel.getNodeModels().stream().filter(n -> n.getName().equals(name)).findAny().get();
+    }
+
+    public static float[] computeLocalMeshTranslation(NodeModel nodeModel) {
+        AccessorModel accessorModel = nodeModel.getMeshModels().get(0).getMeshPrimitiveModels().get(0).getAttributes().get("POSITION");
+        DoubleBuffer db = accessorModel.getAccessorData().createByteBuffer().asDoubleBuffer();
+
+        List<Double> xCoords = new ArrayList<>();
+        List<Double> yCoords = new ArrayList<>();
+        List<Double> zCoords = new ArrayList<>();
+
+        while (db.hasRemaining()) {
+            xCoords.add(db.get());
+            yCoords.add(db.get());
+            zCoords.add(db.get());
+        }
+
+        float x = (float) xCoords.stream().mapToDouble(f -> f).average().getAsDouble();
+        float y = (float) yCoords.stream().mapToDouble(f -> f).average().getAsDouble();
+        float z = (float) zCoords.stream().mapToDouble(f -> f).average().getAsDouble();
+
+        return new float[]{x, y, z};
     }
 }

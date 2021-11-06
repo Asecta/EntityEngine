@@ -635,3 +635,4 @@ public class IKBone implements Serializable {
     }
 
 } // End of FabrikBone3D class
+

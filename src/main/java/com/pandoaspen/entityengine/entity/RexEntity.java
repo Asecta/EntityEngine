@@ -9,13 +9,13 @@ import java.io.File;
 import java.net.URI;
 import java.util.UUID;
 
-public class BipodEntity extends EEntity {
+public class RexEntity extends EEntity {
 
-    private static final URI ANIMATION_FILE = new File(MODEL_FILE, "bipod.glb").toURI();
+    private static final URI ANIMATION_FILE = new File(MODEL_FILE,"trex.glb").toURI();
 
     private Vector3f desiredLocation;
 
-    public BipodEntity(UUID id, Location location) {
+    public RexEntity(UUID id, Location location) {
         super(id, location);
     }
 
@@ -53,5 +53,4 @@ public class BipodEntity extends EEntity {
 
         setPosition(new Vector3f(getPosition()).add(new Vector3f(newDirection).mul(.25f)));
     }
-
 }

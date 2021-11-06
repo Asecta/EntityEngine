@@ -421,3 +421,4 @@ public class IKStructure implements Serializable {
     }
 
 } // End of FabrikStructure3D class
+

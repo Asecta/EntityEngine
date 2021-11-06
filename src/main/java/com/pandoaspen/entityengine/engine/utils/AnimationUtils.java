@@ -74,8 +74,8 @@ public class AnimationUtils {
             String matStr = name.substring(name.indexOf('_') + 1).toUpperCase();
             return new ItemStack(Material.valueOf(matStr));
         } catch (Exception e) {
-            e.printStackTrace();
         }
+
         return new ItemStack(Material.GREEN_WOOL);
     }
 

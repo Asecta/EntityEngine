@@ -13,7 +13,7 @@ public class AnimationHelper {
 
     public static DefaultAnimationHandler getStandAnimationHandler(URI uri, EEntity host) {
         try {
-            return new DefaultAnimationHandler(uri, host, StandEntityAnimationObject::new);
+            return new DefaultAnimationHandler(uri, host);
         } catch (Exception e) {
             e.printStackTrace();
         }
